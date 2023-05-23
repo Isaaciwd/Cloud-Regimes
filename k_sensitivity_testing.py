@@ -1,5 +1,3 @@
-# Data Requirements
-# Must have lat and lon as coordintate names for latitude and longitude TODO maybe fix this
 #%%
 from time import time
 import numpy as np
@@ -16,166 +14,6 @@ import cartopy.crs as ccrs
 from sklearn.cluster import KMeans
 import glob
 from math import ceil
-
-global num_iter, n_samples, data, ds, ht_var_name, tau_var_name, k, height_or_pressure
-
-# Plot the CR cluster centers
-def plot_hists(cl, cluster_labels):
-
-    # # Converting fractional data to percent to plot properly
-    # if np.max(cl) <= 1:
-    #     cl *= 100
-
-    # setting up plots
-    ylabels = ds[ht_var_name].values
-    xlabels = ds[tau_var_name].values
-    X2,Y2 = np.meshgrid(np.arange(len(xlabels) + 1), np.arange(len(ylabels+1)))
-    p = [0,0.2,1,2,3,4,6,8,10,15,99]
-    cmap = mpl.colors.ListedColormap(['white', (0.19215686274509805, 0.25098039215686274, 0.5607843137254902), (0.23529411764705882, 0.3333333333333333, 0.6313725490196078), (0.32941176470588235, 0.5098039215686274, 0.6980392156862745), (0.39215686274509803, 0.6, 0.43137254901960786), (0.44313725490196076, 0.6588235294117647, 0.21568627450980393), (0.4980392156862745, 0.6784313725490196, 0.1843137254901961), (0.5725490196078431, 0.7137254901960784, 0.16862745098039217), (0.7529411764705882, 0.8117647058823529, 0.2), (0.9568627450980393, 0.8980392156862745,0.1607843137254902)])
-    norm = mpl.colors.BoundaryNorm(p,cmap.N)
-    plt.rcParams.update({'font.size': 12})
-    fig_height = 1 + 10/3 * ceil(k/3)
-    fig, ax = plt.subplots(figsize = (17, fig_height), ncols=3, nrows=ceil(k/3), sharex='all', sharey = True)
-
-    aa = ax.ravel()
-    boundaries = p
-    norm = mpl.colors.BoundaryNorm(boundaries, cmap.N, clip=True)
-    aa[1].invert_yaxis()
-
-    # creating weights area for area weighted RFOs
-    weights = cluster_labels.stack(z=('time','lat','lon')).lat.values
-    weights = np.cos(np.deg2rad(weights))
-    weights = weights[valid_indicies]
-    indicies = np.arange(len(mat))
-
-    # Plotting each cluster center
-    for i in range (k):
-
-        # Area Weighted relative Frequency of occurence calculation
-        total_rfo_num = cluster_labels == i 
-        total_rfo_num = np.sum(total_rfo_num * np.cos(np.deg2rad(cluster_labels.lat)))
-        total_rfo_denom = cluster_labels >= 0
-        total_rfo_denom = np.sum(total_rfo_denom * np.cos(np.deg2rad(cluster_labels.lat)))
-        total_rfo = total_rfo_num  / total_rfo_denom * 100
-        total_rfo = total_rfo.values
-
-        # Area weighting each histogram belonging to a cluster and taking the mean
-        # if clustering was preformed with wasserstein distance and area weighting on, mean of i = cl[i], however if clustering was preformed with
-        # conventional kmeans or wasseerstein without weighting, these two will not be equal
-        indicies_i = indicies[np.where(cluster_labels_temp == i)]
-        mean = mat[indicies_i] * weights[indicies_i][:,np.newaxis]
-        mean = np.sum(mean, axis=0) / np.sum(weights[indicies_i])
-        mean = mean.reshape(len(xlabels),len(ylabels)).T           # reshaping into original histogram shape
-        if np.max(mean) <= 1:                                      # Converting fractional data to percent to plot properly
-            mean *= 100
-
-        im = aa[i].pcolormesh(X2,Y2,mean,norm=norm,cmap=cmap)
-        aa[i].set_title(f"CR {i+1}, RFO = {np.round(total_rfo,1)}%")
-
-    # setting titles, labels, etc
-    if height_or_pressure == 'p': fig.supylabel(f'Cloud-top Pressure ({ds[ht_var_name].units})', fontsize = 12, x = 0.09 )
-    if height_or_pressure == 'h': fig.supylabel(f'Cloud-top Height ({ds[ht_var_name].units})', fontsize = 12, x = 0.09  )
-    # fig.supxlabel('Optical Depth', fontsize = 12, y=0.26 )
-    cbar_ax = fig.add_axes([0.95, 0.38, 0.045, 0.45])
-    cb = fig.colorbar(im, cax=cbar_ax, ticks=p)
-    cb.set_label(label='Cloud Cover (%)', size =10)
-    cb.ax.tick_params(labelsize=9)
-    #aa[6].set_position([0.399, 0.125, 0.228, 0.215])
-    #aa[6].set_position([0.33, 0.117, 0.36, 0.16])
-    #aa[-2].remove()
-
-    bbox = aa[1].get_position()
-    p1 = bbox.p1
-    p0 = bbox.p0
-    fig.suptitle(f'{data} Cloud Regimes', x=0.5, y=p1[1]+(1/fig_height * 0.5), fontsize=15)
-    print(p1[1])
-
-    bbox = aa[-2].get_position()
-    p1 = bbox.p1
-    p0 = bbox.p0
-    fig.supxlabel('Optical Depth', fontsize = 12, y=p0[1]-(1/fig_height * 0.5) )
-
-    print(1 + 10/3 * ceil(k/3))
-
-
-    # Removing extra plots
-    for i in range(ceil(k/3)*3-k):
-        aa[-(i+1)].remove()
-
-# Plot RFO maps of the CRss
-def plot_rfo(cluster_labels):
-    
-    COLOR = 'black'
-    mpl.rcParams['text.color'] = COLOR
-    mpl.rcParams['axes.labelcolor'] = COLOR
-    mpl.rcParams['xtick.color'] = COLOR
-    mpl.rcParams['ytick.color'] = COLOR
-    plt.rcParams.update({'font.size': 10})
-    fig_height = 2.2 * ceil(k/2)
-    fig, ax = plt.subplots(ncols=2, nrows=int(k/2 + k%2), subplot_kw={'projection': ccrs.PlateCarree()}, figsize = (10,fig_height))#, sharex='col', sharey='row')
-    plt.subplots_adjust(wspace=0.13, hspace=0.05)
-    aa = ax.ravel()
-    plt.rcParams['figure.dpi'] = 500
-
-    X, Y = np. meshgrid(ds.lon,ds.lat)
-
-    # Plotting the rfo of each cluster
-    tot_rfo_sum = 0 
-    
-    for cluster in range(k): #range(0,k+1):
-        # Calculating rfo
-        rfo = np.sum(cluster_labels==cluster, axis=0) / np.sum(cluster_labels >= 0, axis=0) * 100
-        # tca_explained = np.sum(cluster_labels == cluster) * np.sum(init_clusters[cluster]) / total_cloud_amnt * 100
-        # tca_explained = round(float(tca_explained.values),1)
-        aa[cluster].set_extent([-180, 180, -90, 90])
-        aa[cluster].coastlines()
-        mesh = aa[cluster].pcolormesh(X, Y, rfo, transform=ccrs.PlateCarree(), rasterized = True, cmap="GnBu",vmin=0,vmax=100)
-        #total_rfo = np.sum(cluster_labels==cluster) / np.sum(cluster_labels >= 0) * 100
-        # total_rfo_num = np.sum(cluster_labels == cluster * np.cos(np.deg2rad(cluster_labels.lat)))
-        total_rfo_num = cluster_labels == cluster 
-        total_rfo_num = np.sum(total_rfo_num * np.cos(np.deg2rad(cluster_labels.lat)))
-        total_rfo_denom = cluster_labels >= 0
-        total_rfo_denom = np.sum(total_rfo_denom * np.cos(np.deg2rad(cluster_labels.lat)))
-
-        total_rfo = total_rfo_num  / total_rfo_denom * 100
-        tot_rfo_sum += total_rfo
-        aa[cluster].set_title(f"CR {cluster+1}, RFO = {round(float(total_rfo),1)}", pad=4)
-        # aa[cluster].gridlines(draw_labels=True, dms=True, x_inline=False, y_inline=False)
-        # x_label_plot_list = [4,5,6]
-        # y_label_plot_list = [0,2,4,6]
-        # if cluster in x_label_plot_list:
-
-
-        if cluster % 2 == 0:
-            aa[cluster].set_yticks([-60,-30,0,30,60], crs=ccrs.PlateCarree())        
-            lat_formatter = LatitudeFormatter()
-            aa[cluster].yaxis.set_major_formatter(lat_formatter)
-
-    #aa[7].set_title(f"Weathersdfasdfa State {i+1}, RFO = {round(float(total_rfo),1)}", pad=-40)
-    cb = plt.colorbar(mesh, ax = ax, anchor =(-0.28,0.83), shrink = 0.6)
-    cb.set_label(label = 'RFO (%)', labelpad=-3)
-
-    x_ticks_indicies = np.array([-1,-2])
-
-    if k%2 == 1:
-        aa[-1].remove()
-        x_ticks_indicies -= 1
-
-        #aa[-2].set_position([0.27, 0.11, 0.31, 0.15])
-
-    # plotting x labels on final two plots
-    aa[x_ticks_indicies[0]].set_xticks([-120,-60,0,60,120,], crs=ccrs.PlateCarree())
-    lon_formatter = LongitudeFormatter(zero_direction_label=True)
-    aa[x_ticks_indicies[0]].xaxis.set_major_formatter(lon_formatter)
-    aa[x_ticks_indicies[1]].set_xticks([-120,-60,0,60,120,], crs=ccrs.PlateCarree())
-    lon_formatter = LongitudeFormatter(zero_direction_label=True)
-    aa[x_ticks_indicies[1]].xaxis.set_major_formatter(lon_formatter)
-
-    bbox = aa[1].get_position()
-    p1 = bbox.p1
-    plt.suptitle(f"CR Relative Frequency of Occurence", x= 0.43, y= p1[1]+(1/fig_height * 0.5))#, {round(cl[cluster,23],4)}")
-
-    plt.show()
 
 # K-means algorithm that uses wasserstein distance
 def emd_means(mat, k, tol, init, n_init, hard_stop = 45, weights = None):
@@ -346,59 +184,209 @@ def euclidean_kmeans(k, init, n_init, mat, max_iter):
 
     return cl, cluster_labels_temp
 
-# Compute cluster labels from precomputed cluster centers with appropriate distance
-def precomputed_clusters(mat, cl, wasserstein_or_euclidean):
+def plot_hists_k_testing(histograms):
+    # Converting fractional data to percent to plot properly
+    if np.max(histograms) <= 1:
+        histograms *= 100
 
-    if wasserstein_or_euclidean == 'euclidean':
-        cluster_dists = np.sum((mat[:,:,None] - cl.T[None,:,:])**2, axis = 1)
-        cluster_labels_temp = np.argmin(x, axis = 1)
+    # setting up plots
+    ylabels = ds[ht_var_name].values
+    xlabels = ds[tau_var_name].values
+    X2,Y2 = np.meshgrid(np.arange(len(xlabels) + 1), np.arange(len(ylabels+1)))
+    p = [0,0.2,1,2,3,4,6,8,10,15,99]
+    cmap = mpl.colors.ListedColormap(['white', (0.19215686274509805, 0.25098039215686274, 0.5607843137254902), (0.23529411764705882, 0.3333333333333333, 0.6313725490196078), (0.32941176470588235, 0.5098039215686274, 0.6980392156862745), (0.39215686274509803, 0.6, 0.43137254901960786), (0.44313725490196076, 0.6588235294117647, 0.21568627450980393), (0.4980392156862745, 0.6784313725490196, 0.1843137254901961), (0.5725490196078431, 0.7137254901960784, 0.16862745098039217), (0.7529411764705882, 0.8117647058823529, 0.2), (0.9568627450980393, 0.8980392156862745,0.1607843137254902)])
+    norm = mpl.colors.BoundaryNorm(p,cmap.N)
+    plt.rcParams.update({'font.size': 12})
+    n_histo = len(histograms)
+    fig_height = 1 + 10/3 * ceil(n_histo/3)
+    fig, ax = plt.subplots(figsize = (17, fig_height), ncols=3, nrows=ceil(n_histo/3), sharex='all', sharey = True)
 
-    if wasserstein_or_euclidean == 'wasserstein':
+    aa = ax.ravel()
+    boundaries = p
+    norm = mpl.colors.BoundaryNorm(boundaries, cmap.N, clip=True)
+    aa[1].invert_yaxis()
 
-        # A function to convert mat into the form required for the EMD calculation
-        @njit()
-        def stacking(position_matrix, centroids):
-            centroid_list = []
+    # Plotting each cluster center
+    for i in range (n_histo):
 
-            for i in range(len(centroids)):
-                x = np.empty((3,len(mat[0]))).T
-                x[:,0] = centroids[i]
-                x[:,1] = position_matrix[0]
-                x[:,2] = position_matrix[1]
-                centroid_list.append(x)
+        im = aa[i].pcolormesh(X2,Y2,histograms[i].reshape(len(xlabels),len(ylabels)).T ,norm=norm,cmap=cmap)
+        # aa[i].set_title(f"CR {i+1}, RFO = {np.round(total_rfo,1)}%")
 
-            return centroid_list
-        
-        # setting shape
-        n1 = len(ds[tau_var_name])
-        n2 = len(ds[ht_var_name])
+    # setting titles, labels, etc
+    if height_or_pressure == 'p': fig.supylabel(f'Cloud-top Pressure', fontsize = 12, x = 0.09 )
+    if height_or_pressure == 'h': fig.supylabel(f'Cloud-top Height', fontsize = 12, x = 0.09  )
+    # fig.supxlabel('Optical Depth', fontsize = 12, y=0.26 )
+    cbar_ax = fig.add_axes([0.95, 0.38, 0.045, 0.45])
+    cb = fig.colorbar(im, cax=cbar_ax, ticks=p)
+    cb.set_label(label='Cloud Cover (%)', size =10)
+    cb.ax.tick_params(labelsize=9)
+    #aa[6].set_position([0.399, 0.125, 0.228, 0.215])
+    #aa[6].set_position([0.33, 0.117, 0.36, 0.16])
+    #aa[-2].remove()
 
-        # Calculating the max distance between two points to be used as hyperparameter in EMD
-        # This is not necesarily the only value for this variable that can be used, see Wasserstein documentation
-        # on R hyper-parameter for more information
-        R = (n1**2+n2**2)**0.5
+    bbox = aa[1].get_position()
+    p1 = bbox.p1
+    p0 = bbox.p0
+    # fig.suptitle(f'{data} Cloud Regimes', x=0.5, y=p1[1]+(1/fig_height * 0.5), fontsize=15)
+    print(p1[1])
 
-        # Creating a flattened position matrix to pass wasersstein.PairwiseEMD
-        position_matrix = np.zeros((2,n1,n2))
-        position_matrix[0] = np.tile(np.arange(n2),(n1,1))
-        position_matrix[1] = np.tile(np.arange(n1),(n2,1)).T
-        position_matrix = position_matrix.reshape(2,-1)
+    bbox = aa[-2].get_position()
+    p1 = bbox.p1
+    p0 = bbox.p0
+    fig.supxlabel('Optical Depth', fontsize = 12, y=p0[1]-(1/fig_height * 0.5) )
 
-        # Initialising wasserstein.PairwiseEMD
-        emds = wasserstein.PairwiseEMD(R = R, norm=True, dtype=np.float32, verbose=1, num_threads=162)
-
-        # Rearranging mat to be in the format necesary for wasserstein.PairwiseEMD
-        events = stacking(position_matrix, mat)
-        centroid_list = stacking(position_matrix, cl)
-        emds(events, centroid_list)
-        distances = emds.emds()
-        labels = np.argmin(distances, axis=1)
-
-        cluster_labels_temp = np.argmin(distances, axis=1)
-        
-    return cluster_labels_temp
+    print(1 + 10/3 * ceil(k/3))
 
 
+    # Removing extra plots
+    if n_histo > 2:
+        for i in range(ceil(k/3)*3-k):
+            aa[-(i+1)].remove()
+
+def plot_rfo(cluster_labels):
+    
+    COLOR = 'black'
+    mpl.rcParams['text.color'] = COLOR
+    mpl.rcParams['axes.labelcolor'] = COLOR
+    mpl.rcParams['xtick.color'] = COLOR
+    mpl.rcParams['ytick.color'] = COLOR
+    plt.rcParams.update({'font.size': 10})
+    fig_height = 2.2 * ceil(k/2)
+    fig, ax = plt.subplots(ncols=2, nrows=int(k/2 + k%2), subplot_kw={'projection': ccrs.PlateCarree()}, figsize = (10,fig_height))#, sharex='col', sharey='row')
+    plt.subplots_adjust(wspace=0.13, hspace=0.05)
+    aa = ax.ravel()
+    plt.rcParams['figure.dpi'] = 500
+
+    X, Y = np. meshgrid(ds.lon,ds.lat)
+
+    # Plotting the rfo of each cluster
+    tot_rfo_sum = 0 
+    
+    for cluster in range(k): #range(0,k+1):
+        # Calculating rfo
+        rfo = np.sum(cluster_labels==cluster, axis=0) / np.sum(cluster_labels >= 0, axis=0) * 100
+        # tca_explained = np.sum(cluster_labels == cluster) * np.sum(init_clusters[cluster]) / total_cloud_amnt * 100
+        # tca_explained = round(float(tca_explained.values),1)
+        aa[cluster].set_extent([-180, 180, -90, 90])
+        aa[cluster].coastlines()
+        mesh = aa[cluster].pcolormesh(X, Y, rfo, transform=ccrs.PlateCarree(), rasterized = True, cmap="GnBu",vmin=0,vmax=100)
+        #total_rfo = np.sum(cluster_labels==cluster) / np.sum(cluster_labels >= 0) * 100
+        # total_rfo_num = np.sum(cluster_labels == cluster * np.cos(np.deg2rad(cluster_labels.lat)))
+        total_rfo_num = cluster_labels == cluster 
+        total_rfo_num = np.sum(total_rfo_num * np.cos(np.deg2rad(cluster_labels.lat)))
+        total_rfo_denom = cluster_labels >= 0
+        total_rfo_denom = np.sum(total_rfo_denom * np.cos(np.deg2rad(cluster_labels.lat)))
+
+        total_rfo = total_rfo_num  / total_rfo_denom * 100
+        tot_rfo_sum += total_rfo
+        aa[cluster].set_title(f"CR {cluster+1}, RFO = {round(float(total_rfo),1)}", pad=4)
+        # aa[cluster].gridlines(draw_labels=True, dms=True, x_inline=False, y_inline=False)
+        # x_label_plot_list = [4,5,6]
+        # y_label_plot_list = [0,2,4,6]
+        # if cluster in x_label_plot_list:
+
+
+        if cluster % 2 == 0:
+            aa[cluster].set_yticks([-60,-30,0,30,60], crs=ccrs.PlateCarree())        
+            lat_formatter = LatitudeFormatter()
+            aa[cluster].yaxis.set_major_formatter(lat_formatter)
+
+    #aa[7].set_title(f"Weathersdfasdfa State {i+1}, RFO = {round(float(total_rfo),1)}", pad=-40)
+    cb = plt.colorbar(mesh, ax = ax, anchor =(-0.28,0.83), shrink = 0.6)
+    cb.set_label(label = 'RFO (%)', labelpad=-3)
+
+    x_ticks_indicies = np.array([-1,-2])
+
+    if k%2 == 1:
+        aa[-1].remove()
+        x_ticks_indicies -= 1
+
+        #aa[-2].set_position([0.27, 0.11, 0.31, 0.15])
+
+    # plotting x labels on final two plots
+    aa[x_ticks_indicies[0]].set_xticks([-120,-60,0,60,120,], crs=ccrs.PlateCarree())
+    lon_formatter = LongitudeFormatter(zero_direction_label=True)
+    aa[x_ticks_indicies[0]].xaxis.set_major_formatter(lon_formatter)
+    aa[x_ticks_indicies[1]].set_xticks([-120,-60,0,60,120,], crs=ccrs.PlateCarree())
+    lon_formatter = LongitudeFormatter(zero_direction_label=True)
+    aa[x_ticks_indicies[1]].xaxis.set_major_formatter(lon_formatter)
+
+    bbox = aa[1].get_position()
+    p1 = bbox.p1
+    plt.suptitle(f"CR Relative Frequency of Occurence", x= 0.43, y= p1[1]+(1/fig_height * 0.5))#, {round(cl[cluster,23],4)}")
+
+    plt.show()
+
+def histogram_cor(cl):
+
+    # Creating Correlation pcolormesh
+    plt.figure(figsize=(8, 6), dpi=350)
+    MxClusters = len(cl)
+    cor_coefs = np.zeros((MxClusters,MxClusters))
+
+    for i in range (MxClusters):
+        for x in range (MxClusters):
+            cor_coefs[i,x] = np.corrcoef(cl[i].flatten(),cl[x].flatten())[0,1]
+
+    cmap = plt.cm.get_cmap('Spectral').reversed()
+
+    im = plt.pcolormesh(cor_coefs, vmin = -1, vmax = 1, cmap = cmap)
+    plt.colorbar(im)
+
+    ticklabels = []
+    for i in range(MxClusters):
+        ticklabels.append(f'WS{i+1}')
+
+    positions = np.arange(MxClusters)+0.2
+    for i in range (MxClusters):
+        for x in range (MxClusters):
+            plt.text(positions[i],positions[x]+0.1, round(cor_coefs[i,x],2), color='palevioletred')
+
+    plt.xticks(ticks = positions+0.3, labels = ticklabels)
+    plt.yticks(ticks = positions+0.3, labels = ticklabels)
+
+    plt.title(f"CR Histogram Correlation Matrices, K = {MxClusters}")
+    #plt.savefig(f"/glade/work/idavis/isccp_clustering/monthly/k_correlation_testing/{MxClusters}C_correlation_matrix_{save_index}")
+
+    # plt.clf()
+    plt.show()
+
+def spacial_cor(cluster_labels):
+
+    all_rfo = np.zeros((k,len(cluster_labels.mean(('time')).values.flatten())))
+    # Plotting the rfo of each cluster
+    for cluster in range(0,k):
+        # Calculating rfo
+        rfo = np.sum(cluster_labels==cluster, axis=0) / np.sum(cluster_labels >= 0, axis=0) * 100
+        all_rfo[cluster] = rfo.values.flatten()
+
+    all_rfo = np.ma.masked_invalid(all_rfo)
+    # Creating Correlation pcolormesh
+    plt.figure(figsize=(8, 6), dpi=350)
+    cor_coefs = np.zeros((k,k))
+    for i in range (k):
+        for x in range (k):
+            cor_coefs[i,x] = np.ma.corrcoef(all_rfo[i],all_rfo[x])[0,1]
+
+    cmap = plt.cm.get_cmap('Spectral').reversed()
+    im = plt.pcolormesh(cor_coefs, vmin = -1, vmax =1, cmap = cmap)
+    plt.colorbar(im)
+
+    ticklabels = []
+    for i in range(k):
+        ticklabels.append(f'WS{i+1}')
+
+    positions = np.arange(k)+0.2
+    for i in range (k):
+        for x in range (k):
+            plt.text(positions[i],positions[x]+0.1, round(cor_coefs[i,x],2), color='palevioletred')
+
+    plt.xticks(ticks = positions+0.3, labels = ticklabels)
+    plt.yticks(ticks = positions+0.3, labels = ticklabels)
+
+    plt.title(f"Spacial Correlation Matrices of WSs, K = {k}")
+
+    plt.show()
 #%%
 # Path to data to cluster
 data_path = "/project/amp02/idavis/isccp_clustering/modis_and_misr/MODIS/*.nc" 
@@ -414,20 +402,22 @@ ht_var_name =  'PRES'
 height_or_pressure = 'p'
 
 # kmeans properties
-k=23   # number of cluster to create
+k=4   # number of cluster to create
 tol = 30    # maximum changne in inertia values between kmeans iterations to declare convergence. should be higher if using wasserstein distance
 max_iter = 30   # maximum number of k-means iterations to preform for each initiation
 init='k-means++'    # initialization technique for kmeans, can be 'k-means++', 'random', or initial clusters to use of shape (k, n_tau_bins * n_pressure_bins)
 n_init = 1    # number of initiations of the k-means algorithm. The final result will be the initiation with the lowest calculated inertia
 
+
+# k sensitivity testing properties
+k_range = [3,8] # minimum and maximum values for k to test
+
+# Plot the CR centers and rfo maps? or just the correlation matricies
+plot_hists = False
+plot_rfo_graphs = False
+
 # Choose whether to use a euclidean or wasserstein distance kmeans algorithm
 wasserstein_or_euclidean = "euclidean"
-
-# Set this equal to a numpy ndarray of premade cloud regimes (shape=(k, n_tau_bins * n_pressure_bins)) to skip clustering and preform analysis with the premade regimes
-# If used, the above kmeans properties are ignored, and k is set to premade_cloud_regimes.shape[0]
-# Using this is different from setting init in kmeans properties, as that will continue clustering using the premade cloud regimes and update them. This will not update the cloud regimes
-# and skips clustering entirely. It will only fit the data into these CRs
-premade_cloud_regimes = None
 
 # Minimum and Maximum longitudes and latitudes entered as list, or None for entire range
 lat_range = [-90,90]
@@ -540,31 +530,31 @@ weights=weights[valid_indicies]
 if np.min(mat < 0):
     raise Exception (f'Found negative value in ds.{var_name}, if this is a fill value for missing data, convert to nans and try again')
 
-# Use premade clusters to calculate cluster labels (using specified distance metric) if they have been provided
-if type(premade_cloud_regimes) == np.ndarray:
-    cl = premade_cloud_regimes
-    k = len(premade_cloud_regimes)
-    if premade_cloud_regimes.shape != (k,len(ds[tau_var_name]) * len(ds[ht_var_name])):
-        raise Exception (f'premade_cloud_regimes is the wrong shape. premade_cloud_regimes.shape = {premade_cloud_regimes.shape}, but must be shpae {(k,len(ds.tau_var_name) * len(ds.ht_var_name))} to fit the loaded data')
-    print('Using premade cloud regimes:')
-    cluster_labels_temp = precomputed_clusters(mat, cl, wasserstein_or_euclidean)
 
-# Otherwise preform clustering with specified distance metric
-else:
+# Preform clustering with specified distance metric, n_trials times
+for k in np.arange(k_range[0], k_range[1]+1):
     if wasserstein_or_euclidean == "wasserstein":
         cl, cluster_labels_temp, il, cl_list = emd_means(mat, k=k, tol=tol, init=init, n_init = n_init, hard_stop=max_iter, weights=weights)
     elif wasserstein_or_euclidean == "euclidean":
         cl, cluster_labels_temp = euclidean_kmeans(k, init, n_init, mat, max_iter)
-    else: raise Exception ('Invalid option for wasserstein_or_euclidean. Please enter "wasserstein", "euclidean", or a numpy ndarray to use as premade cloud regimes and preform no clustering')
+    else: raise Exception ('Invalid option for wasserstein_or_euclidean. Please enter "wasserstein", "euclidean"')
 
-# taking the flattened cluster_labels_temp array, and turning it into a datarray the shape of ds.var_name, and reinserting NaNs in place of missing data
-cluster_labels = np.full(len(indicies), np.nan, dtype=np.int32)
-cluster_labels[valid_indicies]=cluster_labels_temp
-cluster_labels = xr.DataArray(data=cluster_labels, coords={"spacetime":histograms.spacetime},dims=("spacetime") )
-cluster_labels = cluster_labels.unstack()
+    # taking the flattened cluster_labels_temp array, and turning it into a datarray the shape of ds.var_name, and reinserting NaNs in place of missing data
+    cluster_labels = np.full(len(indicies), np.nan, dtype=np.int32)
+    cluster_labels[valid_indicies]=cluster_labels_temp
+    cluster_labels = xr.DataArray(data=cluster_labels, coords={"spacetime":histograms.spacetime},dims=("spacetime") )
+    cluster_labels = cluster_labels.unstack()
 
-# Plotting histograms
-plot_hists(cl, cluster_labels)
-# Plotting RFO
-plot_rfo(cluster_labels)
+    histogram_cor(cl)
+    spacial_cor(cluster_labels)
+
+    if plot_hists:
+        plot_hists_k_testing(histograms)
+    if plot_rfo_graphs:
+        plot_rfo(cluster_labels)
+    
+    print('######################################################################')
+    print(f'                            k = {k}')
+    print('######################################################################')
+    
 # %%
