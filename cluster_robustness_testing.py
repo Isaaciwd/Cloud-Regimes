@@ -1,3 +1,10 @@
+# This script is designed to test the robustness of the clustering. The user enters a data path, 
+# any data restrictions such as lat/lon bounding box, time range, k-means properties, and a number of trials to preform. The clustering
+# is then preformed n_trials times creating k * n_trials CRs. These are then clustered with the same values of k. If the clustering parameters 
+# are robust, this should return k clusters each with n_trials members, where each member is very similar within clusters. For example, if a 
+# stratocumulus CR is created, that stratocumulus CR should look cery similar in each of the clustering trials. To examine this, 
+# this script plots the results of the second clustering step. It shows each group of k cluster centers, and a correlation matrix between each
+# of those clusters. Ideally in each plot ther should be n_trials histograms, that look very similar with high coeficients of correlation. 
 #%%
 from time import time
 import numpy as np

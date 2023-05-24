@@ -1,5 +1,10 @@
 # Data Requirements
 # Must have lat and lon as coordintate names for latitude and longitude TODO maybe fix this
+
+# Description
+# this document will open user fed data, preform clustering with either wasserstein distance or euclidean distance, and create maps of the resultant CRs. It is also possible to
+# feed in premade CRs to map and skip clustering, or to continue clustering to refine these CRs. The user can select any lat/lon box, time range, and can select to only 
+# use data from over land or only over water.
 #%%
 from time import time
 import numpy as np
@@ -440,7 +445,6 @@ time_range = ["2003-03-01", "2004-07-01"]
 # Set to 'L' for land only, 'O' for ocean only, or False for both land and ocean
 only_ocean_or_land = 'L'
 
-
 files = glob.glob(data_path)
 # Opening an initial dataset
 init_ds = xr.open_mfdataset(files[0])
@@ -471,10 +475,6 @@ if height_or_pressure == 'p':
 
 # Selecting only points over ocean or points over land if only_ocean_or_land has been used
 if only_ocean_or_land != False:
-    # Shifting lon to be from -180 to 180 if needed
-    # if np.max(ds.lon) > 180:
-    #     lon_grid, lat_grid = np.meshgrid(ds.lon-180,ds.lat)
-    # else:
     lon_grid, lat_grid = np.meshgrid(ds.lon,ds.lat)
     water = globe.is_land(lat_grid, lon_grid) # creating an array that's 1 over land, and 0 over water
     if np.max(ds.lon) > 180: water = np.roll(water, 180, axis=1) # shifting back

@@ -1,3 +1,10 @@
+# This script is designed to test a range of number of clusters (k) to decide on a value of k. The user enters a data path, 
+# any data restrictions such as lat/lon bounding box, time range, k-means properties, and a range of values of k to test. 
+# The script then preforms clustering for each values of K and creates two correlation matrices. One showing the correlation between 
+# each cluster center, and one showing the correlation between each CRs spatial distribution. If an increase in k has produced two CRs that
+# are highly correlated with each other, than this value of k may be too high, and the lower value should be considered.= as the final value of k.
+# for our paper (Davis and Medeiros) we preformed this analysis with euclidean k-means, and then used the resultant value of k with
+# wasserstein k-means to derive our final CRs
 #%%
 from time import time
 import numpy as np
