@@ -78,8 +78,8 @@ def plot_hists(cl, cluster_labels):
         aa[i].set_title(f"CR {i+1}, RFO = {np.round(total_rfo,1)}%")
 
     # setting titles, labels, etc
-    if height_or_pressure == 'p': fig.supylabel(f'Cloud-top Pressure ({ds[ht_var_name].units})', fontsize = 12, x = 0.09 )
-    if height_or_pressure == 'h': fig.supylabel(f'Cloud-top Height ({ds[ht_var_name].units})', fontsize = 12, x = 0.09  )
+    if height_or_pressure == 'p': fig.supylabel(f'Cloud-top Pressure', fontsize = 12, x = 0.09 )
+    if height_or_pressure == 'h': fig.supylabel(f'Cloud-top Height', fontsize = 12, x = 0.09  )
     # fig.supxlabel('Optical Depth', fontsize = 12, y=0.26 )
     cbar_ax = fig.add_axes([0.95, 0.38, 0.045, 0.45])
     cb = fig.colorbar(im, cax=cbar_ax, ticks=p)
@@ -92,7 +92,7 @@ def plot_hists(cl, cluster_labels):
     bbox = aa[1].get_position()
     p1 = bbox.p1
     p0 = bbox.p0
-    fig.suptitle(f'{data} Cloud Regimes', x=0.5, y=p1[1]+(1/fig_height * 0.5), fontsize=15)
+    fig.suptitle(f'Cloud Regimes', x=0.5, y=p1[1]+(1/fig_height * 0.5), fontsize=15)
     print(p1[1])
 
     bbox = aa[-2].get_position()
@@ -567,4 +567,6 @@ cluster_labels = cluster_labels.unstack()
 plot_hists(cl, cluster_labels)
 # Plotting RFO
 plot_rfo(cluster_labels)
+# %%
+
 # %%
