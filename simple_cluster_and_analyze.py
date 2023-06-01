@@ -356,7 +356,7 @@ def precomputed_clusters(mat, cl, wasserstein_or_euclidean):
 
     if wasserstein_or_euclidean == 'euclidean':
         cluster_dists = np.sum((mat[:,:,None] - cl.T[None,:,:])**2, axis = 1)
-        cluster_labels_temp = np.argmin(x, axis = 1)
+        cluster_labels_temp = np.argmin(cluster_dists, axis = 1)
 
     if wasserstein_or_euclidean == 'wasserstein':
 
