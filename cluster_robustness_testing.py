@@ -15,12 +15,16 @@ import xarray as xr
 import matplotlib as mpl
 from numba import njit
 from sklearn.cluster import KMeans
-from global_land_mask import globe
 from cartopy.mpl.ticker import LongitudeFormatter, LatitudeFormatter
 import cartopy.crs as ccrs
 from sklearn.cluster import KMeans
 import glob
 from math import ceil
+from shapely.geometry import Point
+import cartopy
+from shapely.prepared import prep
+from numba import njit
+
 
 # K-means algorithm that uses wasserstein distance
 def emd_means(mat, k, tol, init, n_init, hard_stop = 45, weights = None):
@@ -289,6 +293,44 @@ def histogram_cor(cl):
     # plt.clf()
     plt.show()
 
+# Create a one hot matrix where lat lon coordinates are over land using cartopy
+def create_land_mask(ds):
+    
+    land_110m = cartopy.feature.NaturalEarthFeature('physical', 'land', '110m')
+    land_polygons = list(land_110m.geometries())
+    land_polygons = [prep(land_polygon) for land_polygon in land_polygons]
+
+    lats = ds.lat.values
+    lons = ds.lon.values
+    lon_grid, lat_grid = np.meshgrid(lons, lats)
+
+    points = [Point(point) for point in zip(lon_grid.ravel(), lat_grid.ravel())]
+
+    land = []
+    for land_polygon in land_polygons:
+        land.extend([tuple(point.coords)[0] for point in filter(land_polygon.covers, points)])
+
+    landar = np.asarray(land)
+    lat_lon = np.empty((len(lats)*len(lons),2))
+    oh_land = np.zeros((len(lats)*len(lons)))
+    lat_lon[:,0] = lon_grid.flatten()
+    lat_lon[:,1] = lat_grid.flatten()
+
+    @njit()
+    def test (oh_land, lat_lon, landar):
+        for i in range(len(oh_land)):
+            check = lat_lon[i] == landar
+            if np.max(np.sum(check,axis=1)) == 2:
+                oh_land[i] = 1
+        return oh_land
+    oh_land = test (oh_land, lat_lon, landar)
+
+
+    oh_land=oh_land.reshape((len(lats),len(lons)))
+
+    return oh_land
+
+
 #%%
 # Path to data to cluster
 data_path = "/project/amp02/idavis/isccp_clustering/modis_and_misr/MODIS/*.nc" 
@@ -359,24 +401,18 @@ if height_or_pressure == 'p':
 
 # Selecting only points over ocean or points over land if only_ocean_or_land has been used
 if only_ocean_or_land != False:
-    # Shifting lon to be from -180 to 180 if needed
-    # if np.max(ds.lon) > 180:
-    #     lon_grid, lat_grid = np.meshgrid(ds.lon-180,ds.lat)
-    # else:
-    lon_grid, lat_grid = np.meshgrid(ds.lon,ds.lat)
-    water = globe.is_land(lat_grid, lon_grid) # creating an array that's 1 over land, and 0 over water
-    if np.max(ds.lon) > 180: water = np.roll(water, 180, axis=1) # shifting back
-    
+
+    oh_land = create_land_mask(ds)
     dims = ds.dims
 
-    # inserting new axis to make water a broadcastable shape with ds
+    # inserting new axis to make oh_land a broadcastable shape with ds
     for n in range(len(dims)):
         if dims[n] != 'lat' and dims[n] != 'lon':
-            water = np.expand_dims(water, n)
+            oh_land = np.expand_dims(oh_land, n)
 
     # Masking out the land or water
-    if only_ocean_or_land == 'L': ds = ds.where(water == 1)
-    elif only_ocean_or_land == 'O': ds = ds.where(water == 0)
+    if only_ocean_or_land == 'L': ds = ds.where(oh_land == 1)
+    elif only_ocean_or_land == 'O': ds = ds.where(oh_land == 0)
     else: raise Exception('Invalid option for only_ocean_or_land: Please enter "O" for ocean only, "L" for land only, or set to False for both land and water')
     
 # Selecting lat range
