@@ -54,7 +54,7 @@ time_range = ["2003-03-01", "2004-07-01"]
 # Use data only over land or over ocean
 # Set to 'L' for land only, 'O' for ocean only, or False for both land and ocean
 only_ocean_or_land = 'O'
-# Does this dataset have a built in variable for land fraction? if so enter as a string, otherwise TODO will be used to mask out land or water
+# Does this dataset have a built in variable for land fraction? if so enter as a string, otherwise cartopy will be used to mask out land or water
 land_frac_var_name = None
 
 # Logging level, set to "INFO" for more infromation from wassertein clustering, otherwise keep at "WARNING"
@@ -99,23 +99,28 @@ if height_or_pressure == 'p':
 
 # Selecting only points over ocean or points over land if only_ocean_or_land has been used
 if only_ocean_or_land != False:
-    # lon_grid, lat_grid = np.meshgrid(ds.lon,ds.lat)
-    # water = globe.is_land(lat_grid, lon_grid) # creating an array that's 1 over land, and 0 over water
-    # if np.max(ds.lon) > 180: water = np.roll(water, 180, axis=1) # shifting back
-    
 
-    oh_land = create_land_mask(ds)
+    # Mask out land or water with LANDFRAC variable if we have it
+    if land_frac_var_name != None:
+        if only_ocean_or_land == 'L': ds = ds.where(ds[land_frac_var_name] == 1)
+        elif only_ocean_or_land == 'O': ds = ds.where(ds[land_frac_var_name] == 0)
+        else: raise Exception('Invalid option for only_ocean_or_land: Please enter "O" for ocean only, "L" for land only, or set to False for both land and water')
 
-    # inserting new axis to make water a broadcastable shape with ds
-    dims = ds.dims
-    for n in range(len(dims)):
-        if dims[n] != 'lat' and dims[n] != 'lon':
-            oh_land = np.expand_dims(oh_land, n)
+    # Otherwise use cartopy
+    else:
+        # Creating land mask
+        oh_land = create_land_mask(ds)
 
-    # Masking out the land or water
-    if only_ocean_or_land == 'L': ds = ds.where(oh_land == 1)
-    elif only_ocean_or_land == 'O': ds = ds.where(oh_land == 0)
-    else: raise Exception('Invalid option for only_ocean_or_land: Please enter "O" for ocean only, "L" for land only, or set to False for both land and water')
+        # inserting new axis to make oh_land a broadcastable shape with ds
+        dims = ds.dims
+        for n in range(len(dims)):
+            if dims[n] != 'lat' and dims[n] != 'lon':
+                oh_land = np.expand_dims(oh_land, n)
+
+        # Masking out the land or water
+        if only_ocean_or_land == 'L': ds = ds.where(oh_land == 1)
+        elif only_ocean_or_land == 'O': ds = ds.where(oh_land == 0)
+        else: raise Exception('Invalid option for only_ocean_or_land: Please enter "O" for ocean only, "L" for land only, or set to False for both land and water')
     
 # Selecting lat range
 if lat_range != None:
@@ -162,7 +167,7 @@ valid_indicies = indicies[is_valid==1]
 mat=mat[valid_indicies]
 weights=weights[valid_indicies]
 
-
+# Safetey check that shouldnt really be necesary
 if np.min(mat < 0):
     raise Exception (f'Found negative value in ds.{var_name}, if this is a fill value for missing data, convert to nans and try again')
 
@@ -183,7 +188,7 @@ else:
         cl, cluster_labels_temp = euclidean_kmeans(k, init, n_init, mat, max_iter)
     else: raise Exception ('Invalid option for wasserstein_or_euclidean. Please enter "wasserstein", "euclidean", or a numpy ndarray to use as premade cloud regimes and preform no clustering')
 
-# taking the flattened cluster_labels_temp array, and turning it into a datarray the shape of ds.var_name, and reinserting NaNs in place of missing data
+# Taking the flattened cluster_labels_temp array, and turning it into a datarray the shape of ds.var_name, and reinserting NaNs in place of missing data
 cluster_labels = np.full(len(indicies), np.nan, dtype=np.int32)
 cluster_labels[valid_indicies]=cluster_labels_temp
 cluster_labels = xr.DataArray(data=cluster_labels, coords={"spacetime":histograms.spacetime},dims=("spacetime") )

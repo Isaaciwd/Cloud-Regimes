@@ -431,6 +431,7 @@ def create_land_mask(ds):
 
     return oh_land
 
+
 def plot_hists_k_testing(histograms, k, ds, tau_var_name, ht_var_name, height_or_pressure):
     # Converting fractional data to percent to plot properly
     if np.max(histograms) <= 1:
@@ -487,6 +488,7 @@ def plot_hists_k_testing(histograms, k, ds, tau_var_name, ht_var_name, height_or
         for i in range(ceil(k/3)*3-k):
             aa[-(i+1)].remove()
 
+# Create correlation matricies between the cluster centers of all cloud regimes
 def histogram_cor(cl):
 
     # Creating Correlation pcolormesh
@@ -521,6 +523,7 @@ def histogram_cor(cl):
     # plt.clf()
     plt.show()
 
+# Create correlation matricies between the spatial distribution of all cloud regimes
 def spacial_cor(cluster_labels, k):
 
     all_rfo = np.zeros((k,len(cluster_labels.mean(('time')).values.flatten())))

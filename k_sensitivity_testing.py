@@ -53,6 +53,9 @@ time_range = ["2003-03-01", "2004-07-01"]
 # Use data only over land or over ocean
 # Set to 'L' for land only, 'O' for ocean only, or False for both land and ocean
 only_ocean_or_land = 'L'
+# Does this dataset have a built in variable for land fraction? if so enter as a string, otherwise cartopy will be used to mask out land or water
+land_frac_var_name = None
+
 # Logging level, set to "INFO" for more infromation from wassertein clustering, otherwise keep at "WARNING"
 logging_level = 'WARNING'
 
@@ -66,6 +69,12 @@ init_ds = xr.open_mfdataset(files[0])
 remove = list(init_ds.keys())
 # Deleting the variables we want to keep in our dataset, all remaining variables will be dropped upon opening the files, this allows for faster opening of large files
 remove.remove(var_name)
+# If land_frac_var_name is a string, take it out of the variables to be dropped upon opening files. If it has been entered incorrectly inform the user and proceed with TODO
+if land_frac_var_name != None:
+    try: remove.remove(land_frac_var_name)
+    except: 
+        land_frac_var_name = None
+        print(f'{land_frac_var_name} variable does not exist, make sure land_frac_var_name is set correctly. Using cartopy for land mask')
 
 # opening data
 ds = xr.open_mfdataset(files, drop_variables = remove)
@@ -90,18 +99,27 @@ if height_or_pressure == 'p':
 # Selecting only points over ocean or points over land if only_ocean_or_land has been used
 if only_ocean_or_land != False:
 
-    oh_land = create_land_mask(ds)
-    dims = ds.dims
+    # Mask out land or water with LANDFRAC variable if we have it
+    if land_frac_var_name != None:
+        if only_ocean_or_land == 'L': ds = ds.where(ds[land_frac_var_name] == 1)
+        elif only_ocean_or_land == 'O': ds = ds.where(ds[land_frac_var_name] == 0)
+        else: raise Exception('Invalid option for only_ocean_or_land: Please enter "O" for ocean only, "L" for land only, or set to False for both land and water')
 
-    # inserting new axis to make oh_land a broadcastable shape with ds
-    for n in range(len(dims)):
-        if dims[n] != 'lat' and dims[n] != 'lon':
-            oh_land = np.expand_dims(oh_land, n)
+    # Otherwise use cartopy
+    else:
+        # Creating land mask
+        oh_land = create_land_mask(ds)
 
-    # Masking out the land or water
-    if only_ocean_or_land == 'L': ds = ds.where(oh_land == 1)
-    elif only_ocean_or_land == 'O': ds = ds.where(oh_land == 0)
-    else: raise Exception('Invalid option for only_ocean_or_land: Please enter "O" for ocean only, "L" for land only, or set to False for both land and water')
+        # inserting new axis to make oh_land a broadcastable shape with ds
+        dims = ds.dims
+        for n in range(len(dims)):
+            if dims[n] != 'lat' and dims[n] != 'lon':
+                oh_land = np.expand_dims(oh_land, n)
+
+        # Masking out the land or water
+        if only_ocean_or_land == 'L': ds = ds.where(oh_land == 1)
+        elif only_ocean_or_land == 'O': ds = ds.where(oh_land == 0)
+        else: raise Exception('Invalid option for only_ocean_or_land: Please enter "O" for ocean only, "L" for land only, or set to False for both land and water')
     
 # Selecting lat range
 if lat_range != None:
