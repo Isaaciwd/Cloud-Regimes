@@ -6,30 +6,15 @@
 # feed in premade CRs to map and skip clustering, or to continue clustering to refine these CRs. The user can select any lat/lon box, time range, and can select to only 
 # use data from over land or only over water.
 #%%
-from time import time
 import numpy as np
-import wasserstein
-import matplotlib.pyplot as plt
-from scipy import sparse
 import xarray as xr
-import matplotlib as mpl
-from numba import njit
-from sklearn.cluster import KMeans
-from cartopy.mpl.ticker import LongitudeFormatter, LatitudeFormatter
-import cartopy.crs as ccrs
-from sklearn.cluster import KMeans
 import glob
-from math import ceil
-from shapely.geometry import Point
-import cartopy
-from shapely.prepared import prep
-from numba import njit
 from Functions import plot_hists, plot_rfo, emd_means, euclidean_kmeans, precomputed_clusters, create_land_mask
+import logging as lgr
 
 #global num_iter, n_samples, data, ds, ht_var_name, tau_var_name, k, height_or_pressure
 
 
-#%%
 # Path to data to cluster
 data_path = "/project/amp02/idavis/isccp_clustering/modis_and_misr/MODIS/*.nc" 
 
@@ -51,7 +36,7 @@ init='k-means++'    # initialization technique for kmeans, can be 'k-means++', '
 n_init = 1    # number of initiations of the k-means algorithm. The final result will be the initiation with the lowest calculated inertia
 
 # Choose whether to use a euclidean or wasserstein distance kmeans algorithm
-wasserstein_or_euclidean = "euclidean"
+wasserstein_or_euclidean = "wasserstein"
 
 # Set this equal to a numpy ndarray of premade cloud regimes (shape=(k, n_tau_bins * n_pressure_bins)) to skip clustering and preform analysis with the premade regimes
 # If used, the above kmeans properties are ignored, and k is set to premade_cloud_regimes.shape[0]
@@ -72,6 +57,12 @@ only_ocean_or_land = 'O'
 # Does this dataset have a built in variable for land fraction? if so enter as a string, otherwise TODO will be used to mask out land or water
 land_frac_var_name = None
 
+# Logging level, set to "INFO" for more infromation from wassertein clustering, otherwise keep at "WARNING"
+logging_level = 'WARNING'
+
+# Setting up logger
+lgr.basicConfig(level=lgr.DEBUG)
+# Getting files
 files = glob.glob(data_path)
 # Opening an initial dataset
 init_ds = xr.open_mfdataset(files[0])
@@ -181,7 +172,7 @@ if type(premade_cloud_regimes) == np.ndarray:
     k = len(premade_cloud_regimes)
     if premade_cloud_regimes.shape != (k,len(ds[tau_var_name]) * len(ds[ht_var_name])):
         raise Exception (f'premade_cloud_regimes is the wrong shape. premade_cloud_regimes.shape = {premade_cloud_regimes.shape}, but must be shpae {(k,len(ds.tau_var_name) * len(ds.ht_var_name))} to fit the loaded data')
-    print('Using premade cloud regimes:')
+    lgr.info('Using premade cloud regimes:')
     cluster_labels_temp = precomputed_clusters(mat, cl, wasserstein_or_euclidean)
 
 # Otherwise preform clustering with specified distance metric

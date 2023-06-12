@@ -6,28 +6,11 @@
 # for our paper (Davis and Medeiros) we preformed this analysis with euclidean k-means, and then used the resultant value of k with
 # wasserstein k-means to derive our final CRs
 #%%
-from time import time
 import numpy as np
-import wasserstein
-import matplotlib.pyplot as plt
-from scipy import sparse
 import xarray as xr
-import matplotlib as mpl
-from numba import njit
-from sklearn.cluster import KMeans
-from cartopy.mpl.ticker import LongitudeFormatter, LatitudeFormatter
-import cartopy.crs as ccrs
-from sklearn.cluster import KMeans
 import glob
-from math import ceil
-from shapely.geometry import Point
-import cartopy
-from shapely.prepared import prep
-from numba import njit
 from Functions import emd_means, euclidean_kmeans, plot_hists_k_testing, plot_rfo, histogram_cor, spacial_cor, create_land_mask
-
-
-
+import logging as lgr
 #%%
 # Path to data to cluster
 data_path = "/project/amp02/idavis/isccp_clustering/modis_and_misr/MODIS/*.nc" 
@@ -70,8 +53,12 @@ time_range = ["2003-03-01", "2004-07-01"]
 # Use data only over land or over ocean
 # Set to 'L' for land only, 'O' for ocean only, or False for both land and ocean
 only_ocean_or_land = 'L'
+# Logging level, set to "INFO" for more infromation from wassertein clustering, otherwise keep at "WARNING"
+logging_level = 'WARNING'
 
-
+# Setting up logger
+lgr.basicConfig(level=lgr.DEBUG)
+# Getting files
 files = glob.glob(data_path)
 # Opening an initial dataset
 init_ds = xr.open_mfdataset(files[0])

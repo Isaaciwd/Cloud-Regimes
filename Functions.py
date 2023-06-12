@@ -1,5 +1,8 @@
 #%%
-from time import time
+import logging as lgr
+lgr.getLogger('matplotlib').setLevel(lgr.WARNING)
+lgr.getLogger('numba').setLevel(lgr.WARNING)
+from time import perf_counter
 import numpy as np
 import wasserstein
 import matplotlib.pyplot as plt
@@ -85,14 +88,11 @@ def plot_hists(cluster_labels, k, ds, ht_var_name, tau_var_name, valid_indicies,
     p1 = bbox.p1
     p0 = bbox.p0
     fig.suptitle(f'Cloud Regimes', x=0.5, y=p1[1]+(1/fig_height * 0.5), fontsize=15)
-    print(p1[1])
 
     bbox = aa[-2].get_position()
     p1 = bbox.p1
     p0 = bbox.p0
     fig.supxlabel('Optical Depth', fontsize = 12, y=p0[1]-(1/fig_height * 0.5) )
-
-    print(1 + 10/3 * ceil(k/3))
 
 
     # Removing extra plots
@@ -108,11 +108,11 @@ def plot_rfo(cluster_labels, k ,ds):
     mpl.rcParams['xtick.color'] = COLOR
     mpl.rcParams['ytick.color'] = COLOR
     plt.rcParams.update({'font.size': 10})
+    plt.rcParams['figure.dpi'] = 500
     fig_height = 2.2 * ceil(k/2)
     fig, ax = plt.subplots(ncols=2, nrows=int(k/2 + k%2), subplot_kw={'projection': ccrs.PlateCarree()}, figsize = (10,fig_height))#, sharex='col', sharey='row')
     plt.subplots_adjust(wspace=0.13, hspace=0.05)
     aa = ax.ravel()
-    plt.rcParams['figure.dpi'] = 500
 
     X, Y = np. meshgrid(ds.lon,ds.lat)
 
@@ -197,7 +197,6 @@ def emd_means(mat, k, tol, init, n_init, ds, tau_var_name, ht_var_name, hard_sto
     if type(weights) == np.ndarray: 
         weighted = True
         mat_w = mat * weights[:,None]
-        print("AREA WEIGHTED")
     else: weighted = False
 
     centroid_labels = np.arange(k, dtype=np.int32)  # (k, )
@@ -239,9 +238,9 @@ def emd_means(mat, k, tol, init, n_init, ds, tau_var_name, ht_var_name, hard_sto
             dists_ar = np.full((len(mat),k-1), np.inf)
             t = 0
             for i in range(k-1):
-                x = time()
+                x = perf_counter()
                 emds(events,centroid_list[i:i+1])
-                t += time() - x
+                t += perf_counter() - x
                 dists_ar[:,i] = emds.emds().squeeze()
                 weights_kpp = np.min(dists_ar, axis=1)
                 weights_kpp = weights_kpp / np.sum(weights_kpp)
@@ -250,7 +249,7 @@ def emd_means(mat, k, tol, init, n_init, ds, tau_var_name, ht_var_name, hard_sto
                 init_clusters[i+1] = mat[choice]
                 centroid_list = stacking(position_matrix, init_clusters)
 
-            print(f"{round(t,1)} Seconds for k-means++ initialization")
+            lgr.info(f"{round(t,1)} Seconds for k-means++ initialization")
 
             centroids = init_clusters
         
@@ -287,7 +286,7 @@ def emd_means(mat, k, tol, init, n_init, ds, tau_var_name, ht_var_name, hard_sto
             else: emd_inertia = np.sum(distances[onehot_matrix]**2)
             emd_inertia_list.append(emd_inertia)
             
-            s = time()
+            s = perf_counter()
             # Updating cluster centroids
             if weighted == False:
                 b_data, b_oh = np.broadcast_arrays(  # (n, k, d), (n, k, d)
@@ -300,23 +299,23 @@ def emd_means(mat, k, tol, init, n_init, ds, tau_var_name, ht_var_name, hard_sto
                 for i in range (k):
                     centroids[i] = np.sum(mat_w[np.where(labels == i)], axis = 0) / np.sum(weights[np.where(labels == i)])
 
-            t += time() - s
+            t += perf_counter() - s
 
             # Calculate change in inertia from last step
             if iter > 0:
                 inertia_diff = emd_inertia_list[-2] - emd_inertia_list[-1]
-                print(inertia_diff)
+                lgr.info(f"Change in inertia from last iteration = {inertia_diff}")
 
             iter += 1
         
             # Check if we've reached the hard stop on number of iterations
             if iter == hard_stop:
-                print(F"WARNING: HARD STOP = {hard_stop} REACHED")
-                print(f"tol = {tol}, final inertia = {emd_inertia}")
+                lgr.warning(F"HARD STOP = {hard_stop} reached, this run may not have converged")
+                lgr.info(f"tol = {tol}, final inertia = {emd_inertia}")
                 break
 
-        print(f"{iter} iterations until convergence with tol = {tol} ")
-        print(f"Weighted = {weighted}: time spent updating centroids per iter = {round(t/iter,2)}")
+        lgr.info(f"{iter} iterations until convergence with tol = {tol} ")
+
 
         centroid_tracking.append(centroids)
         inertia_tracking[init_number] = emd_inertia
