@@ -12,6 +12,8 @@ import xarray as xr
 import glob
 from Functions import emd_means, euclidean_kmeans, plot_hists_k_testing, histogram_cor, create_land_mask
 import logging as lgr
+import dask
+
 #%%
 # Path to data to cluster
 data_path = "/project/amp02/idavis/isccp_clustering/modis_and_misr/MODIS/*.nc" 
@@ -58,6 +60,8 @@ logging_level = 'WARNING'
 
 # Setting up logger
 lgr.basicConfig(level=lgr.DEBUG)
+# Avoid creation of large chunks with dask
+dask.config.set({"array.slicing.split_large_chunks": False})
 # Getting files
 files = glob.glob(data_path)
 # Opening an initial dataset
@@ -72,7 +76,6 @@ if land_frac_var_name != None:
     except: 
         land_frac_var_name = None
         print(f'{land_frac_var_name} variable does not exist, make sure land_frac_var_name is set correctly. Using TODO for land mask')
-
 
 # opening data
 ds = xr.open_mfdataset(files, drop_variables = remove)

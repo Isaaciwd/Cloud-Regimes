@@ -11,8 +11,7 @@ import xarray as xr
 import glob
 from Functions import plot_hists, plot_rfo, emd_means, euclidean_kmeans, precomputed_clusters, create_land_mask
 import logging as lgr
-
-#global num_iter, n_samples, data, ds, ht_var_name, tau_var_name, k, height_or_pressure
+import dask
 
 
 # Path to data to cluster
@@ -36,7 +35,7 @@ init='k-means++'    # initialization technique for kmeans, can be 'k-means++', '
 n_init = 1    # number of initiations of the k-means algorithm. The final result will be the initiation with the lowest calculated inertia
 
 # Choose whether to use a euclidean or wasserstein distance kmeans algorithm
-wasserstein_or_euclidean = "wasserstein"
+wasserstein_or_euclidean = "euclidean"
 
 # Set this equal to a numpy ndarray of premade cloud regimes (shape=(k, n_tau_bins * n_pressure_bins)) to skip clustering and preform analysis with the premade regimes
 # If used, the above kmeans properties are ignored, and k is set to premade_cloud_regimes.shape[0]
@@ -62,6 +61,8 @@ logging_level = 'WARNING'
 
 # Setting up logger
 lgr.basicConfig(level=lgr.DEBUG)
+# Avoid creation of large chunks with dask
+dask.config.set({"array.slicing.split_large_chunks": False})
 # Getting files
 files = glob.glob(data_path)
 # Opening an initial dataset
@@ -70,7 +71,7 @@ init_ds = xr.open_mfdataset(files[0])
 remove = list(init_ds.keys())
 # Deleting the variables we want to keep in our dataset, all remaining variables will be dropped upon opening the files, this allows for faster opening of large files
 remove.remove(var_name)
-# If land_frac_var_name is a string, take it out of the variables to be droppe dupon opening files. If it has been entered incorrectly inform the user and proceed with TODO
+# If land_frac_var_name is a string, take it out of the variables to be dropped upon opening files. If it has been entered incorrectly inform the user and proceed with TODO
 if land_frac_var_name != None:
     try: remove.remove(land_frac_var_name)
     except: 
@@ -83,6 +84,7 @@ ds = xr.open_mfdataset(files, drop_variables = remove)
 # turning into a dataarray
 ds = ds[var_name]
 
+#TODO this should be unnecesary now
 # Adjusting lon to run from -180 to 180 if it doesnt already
 if np.max(ds.lon) > 180: 
     ds.coords['lon'] = (ds.coords['lon'] + 180) % 360 - 180
@@ -193,7 +195,7 @@ cluster_labels = np.full(len(indicies), np.nan, dtype=np.int32)
 cluster_labels[valid_indicies]=cluster_labels_temp
 cluster_labels = xr.DataArray(data=cluster_labels, coords={"spacetime":histograms.spacetime},dims=("spacetime") )
 cluster_labels = cluster_labels.unstack()
-
+#%%
 # Plotting histograms
 plot_hists(cluster_labels, k, ds, ht_var_name, tau_var_name, valid_indicies, mat, cluster_labels_temp, height_or_pressure)
 # Plotting RFO
