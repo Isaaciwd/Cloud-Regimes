@@ -44,13 +44,14 @@ def open_and_process(data_path, k, tol, max_iter, init, n_init, var_name, tau_va
             land_frac_var_name = None
             print(f'{land_frac_var_name} variable does not exist, make sure land_frac_var_name is set correctly. Using TODO for land mask')
 
-    # opening data
+    # Opening data
+    lgr.info(' Opening dataset:')
     ds = xr.open_mfdataset(files, drop_variables = remove)
 
-    # turning into a dataarray
+    # Turning into a dataarray
+    lgr.info(' Opening finished. Beginning preprocessing:')
     ds = ds[var_name]
 
-    #TODO this should be unnecesary now, remove once confident
     # Adjusting lon to run from -180 to 180 if it doesnt already
     if np.max(ds.lon) > 180: 
         ds.coords['lon'] = (ds.coords['lon'] + 180) % 360 - 180
@@ -122,6 +123,7 @@ def open_and_process(data_path, k, tol, max_iter, init, n_init, var_name, tau_va
     ds = ds.sel(ht_selection)
 
     # Selcting only the relevant data and stacking it to shape n_histograms, n_tau * n_pc
+    lgr.info(' Reshaping data to shape (n_histograms, n_tau_bins* n_pc_bins):')
     dims = list(ds.dims)
     dims.remove(tau_var_name)
     dims.remove(ht_var_name)
@@ -129,6 +131,7 @@ def open_and_process(data_path, k, tol, max_iter, init, n_init, var_name, tau_va
     weights = np.cos(np.deg2rad(histograms[lat_var_name].values)) # weights array to use with emd-kmeans
 
     # Turning into a numpy array for clustering
+    lgr.info(' Reading data into memory:')
     mat = histograms.values
 
     # Removing all histograms with 1 or more nans in them
@@ -144,6 +147,7 @@ def open_and_process(data_path, k, tol, max_iter, init, n_init, var_name, tau_va
         raise Exception (f'Found negative value in ds.{var_name}, if this is a fill value for missing data, convert to nans and try again')
     
     # If cluster is not true, then skip clustering and just return the oopened and preprocessed data
+    lgr.info(' Finished preprocessing:')
     if cluster == False:
         return mat, valid_indicies, ds, histograms
 
@@ -151,20 +155,25 @@ def open_and_process(data_path, k, tol, max_iter, init, n_init, var_name, tau_va
     else:
         # Use premade clusters to calculate cluster labels (using specified distance metric) if they have been provided
         if type(premade_cloud_regimes) == np.ndarray:
+            lgr.info(' Calculating cluster_labels for premade_cloud_regimes:')
+            s = perf_counter()
             cl = premade_cloud_regimes
             k = len(premade_cloud_regimes)
             if premade_cloud_regimes.shape != (k,len(ds[tau_var_name]) * len(ds[ht_var_name])):
                 raise Exception (f'premade_cloud_regimes is the wrong shape. premade_cloud_regimes.shape = {premade_cloud_regimes.shape}, but must be shpae {(k,len(ds.tau_var_name) * len(ds.ht_var_name))} to fit the loaded data')
-            lgr.info('Using premade cloud regimes:')
             cluster_labels_temp = precomputed_clusters(mat, cl, wasserstein_or_euclidean)
-
+            lgr.info(f' {round(perf_counter()-s)} seconds to calculatecluster_labels for premade_cloud_regimes:')
+            
         # Otherwise preform clustering with specified distance metric
         else:
+            lgr.info(' Beginning clustering:')
+            s = perf_counter()
             if wasserstein_or_euclidean == "wasserstein":
-                cl, cluster_labels_temp, il, cl_list = emd_means(mat, k, tol, init, n_init, ds, tau_var_name, ht_var_name, hard_stop = 45, weights = None)
+                cl, cluster_labels_temp, il, cl_list = emd_means(mat, k, tol, init, n_init, ds, tau_var_name, ht_var_name, max_iter, weights = None)
             elif wasserstein_or_euclidean == "euclidean":
                 cl, cluster_labels_temp = euclidean_kmeans(k, init, n_init, mat, max_iter)
             else: raise Exception ('Invalid option for wasserstein_or_euclidean. Please enter "wasserstein", "euclidean", or a numpy ndarray to use as premade cloud regimes and preform no clustering')
+            lgr.info(f' {round(perf_counter()-s)} seconds to cluster:')
 
         # Taking the flattened cluster_labels_temp array, and turning it into a datarray the shape of ds.var_name, and reinserting NaNs in place of missing data
         cluster_labels = np.full(len(indicies), np.nan, dtype=np.int32)
@@ -173,8 +182,6 @@ def open_and_process(data_path, k, tol, max_iter, init, n_init, var_name, tau_va
         cluster_labels = cluster_labels.unstack()
 
         return mat, cluster_labels, cluster_labels_temp, valid_indicies, ds
-
-
 
 # Plot the CR cluster centers
 def plot_hists(cluster_labels, k, ds, ht_var_name, tau_var_name, valid_indicies, mat, cluster_labels_temp, height_or_pressure):
@@ -391,11 +398,9 @@ def emd_means(mat, k, tol, init, n_init, ds, tau_var_name, ht_var_name, hard_sto
             centroid_list = stacking(position_matrix, init_clusters)
 
             dists_ar = np.full((len(mat),k-1), np.inf)
-            t = 0
+            x = perf_counter()
             for i in range(k-1):
-                x = perf_counter()
                 emds(events,centroid_list[i:i+1])
-                t += perf_counter() - x
                 dists_ar[:,i] = emds.emds().squeeze()
                 weights_kpp = np.min(dists_ar, axis=1)
                 weights_kpp = weights_kpp / np.sum(weights_kpp)
@@ -404,7 +409,7 @@ def emd_means(mat, k, tol, init, n_init, ds, tau_var_name, ht_var_name, hard_sto
                 init_clusters[i+1] = mat[choice]
                 centroid_list = stacking(position_matrix, init_clusters)
 
-            lgr.info(f"{round(t,1)} Seconds for k-means++ initialization")
+            lgr.info(f" {round(perf_counter()-x,1)} Seconds for k-means++ initialization:")
 
             centroids = init_clusters
         
@@ -441,7 +446,6 @@ def emd_means(mat, k, tol, init, n_init, ds, tau_var_name, ht_var_name, hard_sto
             else: emd_inertia = np.sum(distances[onehot_matrix]**2)
             emd_inertia_list.append(emd_inertia)
             
-            s = perf_counter()
             # Updating cluster centroids
             if weighted == False:
                 b_data, b_oh = np.broadcast_arrays(  # (n, k, d), (n, k, d)
@@ -454,26 +458,26 @@ def emd_means(mat, k, tol, init, n_init, ds, tau_var_name, ht_var_name, hard_sto
                 for i in range (k):
                     centroids[i] = np.sum(mat_w[np.where(labels == i)], axis = 0) / np.sum(weights[np.where(labels == i)])
 
-            t += perf_counter() - s
-
             # Calculate change in inertia from last step
             if iter > 0:
                 inertia_diff = emd_inertia_list[-2] - emd_inertia_list[-1]
-                lgr.info(f"Change in inertia from last iteration = {inertia_diff}")
+                lgr.info(f" Change in inertia from last iteration = {round(inertia_diff,1)}")
 
             iter += 1
         
             # Check if we've reached the hard stop on number of iterations
             if iter == hard_stop:
-                lgr.warning(F"HARD STOP = {hard_stop} reached, this run may not have converged")
-                lgr.info(f"tol = {tol}, final inertia = {emd_inertia}")
+                lgr.warning(f" max_iter = {hard_stop} reached, this run may not have converged")
+                lgr.info(f" tol = {tol}, final change in inertia = {round(inertia_diff,1)}, final inertia = {round(emd_inertia,1)}")
                 break
 
-        lgr.info(f"{iter} iterations until convergence with tol = {tol} ")
-
+        lgr.info(f" {iter} iterations until convergence with tol = {tol} ")
 
         centroid_tracking.append(centroids)
         inertia_tracking[init_number] = emd_inertia
+
+        lgr.info(f" Finished initiation {init_number+1} out of {n_init} ")
+        
 
     # retreiving the cluster centers that had the lowest inertia
     best_result = np.argmin(inertia_tracking)
@@ -586,7 +590,7 @@ def create_land_mask(ds):
 
     return oh_land
 
-
+# Plot histograms from k_sensitivty_testing.py
 def plot_hists_k_testing(histograms, k, ds, tau_var_name, ht_var_name, height_or_pressure):
     # Converting fractional data to percent to plot properly
     if np.max(histograms) <= 1:

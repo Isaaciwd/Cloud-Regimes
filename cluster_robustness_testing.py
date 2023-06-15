@@ -54,8 +54,8 @@ only_ocean_or_land = 'L'
 # Does this dataset have a built in variable for land fraction? if so enter variable name as a string, otherwise cartopy will be used to mask out land or water
 land_frac_var_name = None
 
-# Logging level, set to "INFO" for more infromation from wassertein clustering, otherwise keep at "WARNING"
-logging_level = 'WARNING'
+# Logging level, set to "INFO" for information about what the code is doing, otherwise keep at "WARNING"
+logging_level = 'INFO'
 
 # Setting up logger
 lgr.basicConfig(level=lgr.DEBUG)

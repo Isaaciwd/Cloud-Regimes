@@ -1,10 +1,6 @@
-# Data Requirements
-# Must have lat and lon as coordintate names for latitude and longitude TODO maybe fix this
-
 # Description
-# this document will open user fed data, preform clustering with either wasserstein distance or euclidean distance, and create maps of the resultant CRs. It is also possible to
-# feed in premade CRs to map and skip clustering, or to continue clustering to refine these CRs. The user can select any lat/lon box, time range, and can select to only 
-# use data from over land or only over water.
+# This document will open user fed data, preform clustering with either wasserstein distance or euclidean distance, and create maps of the resultant CRs. It is also possible to
+# feed in premade CRs to map and skip clustering. The user can select any lat/lon box, time range, and can select to only use data from over land or only over water.
 #%%
 from Functions import plot_hists, plot_rfo, open_and_process
 import logging as lgr
@@ -27,12 +23,12 @@ height_or_pressure = 'p'
 # kmeans properties
 k=6   # number of cluster to create
 tol = 30    # maximum changne in inertia values between kmeans iterations to declare convergence. should be higher if using wasserstein distance
-max_iter = 30   # maximum number of k-means iterations to preform for each initiation
+max_iter = 2   # maximum number of k-means iterations to preform for each initiation
 init='k-means++'    # initialization technique for kmeans, can be 'k-means++', 'random', or initial clusters to use of shape (k, n_tau_bins * n_pressure_bins)
-n_init = 1    # number of initiations of the k-means algorithm. The final result will be the initiation with the lowest calculated inertia
+n_init = 2    # number of initiations of the k-means algorithm. The final result will be the initiation with the lowest calculated inertia
 
 # Choose whether to use a euclidean or wasserstein distance kmeans algorithm
-wasserstein_or_euclidean = "euclidean"
+wasserstein_or_euclidean = "wasserstein"
 
 # Set this equal to a numpy ndarray of premade cloud regimes (shape=(k, n_tau_bins * n_pressure_bins)) to skip clustering and preform analysis with the premade regimes
 # If used, the above kmeans properties are ignored, and k is set to premade_cloud_regimes.shape[0]
@@ -53,18 +49,16 @@ only_ocean_or_land = 'O'
 # Does this dataset have a built in variable for land fraction? if so enter as a string, otherwise cartopy will be used to mask out land or water
 land_frac_var_name = None
 
-# Logging level, set to "INFO" for more infromation from wassertein clustering, otherwise keep at "WARNING"
-logging_level = 'WARNING'
+# Logging level, set to "INFO" for information about what the code is doing, otherwise keep at "WARNING"
+logging_level = 'INFO'
+
 
 # Setting up logger
-lgr.basicConfig(level=lgr.DEBUG)
-
+lgr.root.setLevel(logging_level)
 # Opening data, and clustering
 mat, cluster_labels, cluster_labels_temp, valid_indicies, ds = open_and_process(data_path, k, tol, max_iter, init, n_init, var_name, tau_var_name, ht_var_name, lat_var_name, lon_var_name, height_or_pressure, wasserstein_or_euclidean, premade_cloud_regimes, lat_range, lon_range, time_range, only_ocean_or_land, land_frac_var_name)
-
 # Plotting histograms
 plot_hists(cluster_labels, k, ds, ht_var_name, tau_var_name, valid_indicies, mat, cluster_labels_temp, height_or_pressure)
-
 # Plotting RFO
 plot_rfo(cluster_labels, k ,ds)
 # %%
