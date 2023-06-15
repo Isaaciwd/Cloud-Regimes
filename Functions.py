@@ -28,7 +28,7 @@ dask.config.set({"array.slicing.split_large_chunks": False})
 
 # Open data, process into an (n_observation, n_dims) matrix for clustering, cluster and or create cluster labels, and return them
 # Not sure if i should move this here, not finishing for now. Still needs all the kmeans variables to be passed to work
-def open_and_process(data_path, k, var_name, tau_var_name, ht_var_name, height_or_pressure, wasserstein_or_euclidean = "euclidean", premade_cloud_regimes=None, lat_range=None, lon_range=None, time_range=None, only_ocean_or_land=False, land_frac_var_name=None):
+def open_and_process(data_path, k, tol, max_iter, init, n_init, var_name, tau_var_name, ht_var_name, lat_var_name, lon_var_name, height_or_pressure, wasserstein_or_euclidean = "euclidean", premade_cloud_regimes=None, lat_range=None, lon_range=None, time_range=None, only_ocean_or_land=False, land_frac_var_name=None, cluster=True):
     # Getting files
     files = glob.glob(data_path)
     # Opening an initial dataset
@@ -50,7 +50,7 @@ def open_and_process(data_path, k, var_name, tau_var_name, ht_var_name, height_o
     # turning into a dataarray
     ds = ds[var_name]
 
-    #TODO this should be unnecesary now
+    #TODO this should be unnecesary now, remove once confident
     # Adjusting lon to run from -180 to 180 if it doesnt already
     if np.max(ds.lon) > 180: 
         ds.coords['lon'] = (ds.coords['lon'] + 180) % 360 - 180
@@ -82,7 +82,7 @@ def open_and_process(data_path, k, var_name, tau_var_name, ht_var_name, height_o
             # inserting new axis to make oh_land a broadcastable shape with ds
             dims = ds.dims
             for n in range(len(dims)):
-                if dims[n] != 'lat' and dims[n] != 'lon':
+                if dims[n] != lat_var_name and dims[n] != lon_var_name:
                     oh_land = np.expand_dims(oh_land, n)
 
             # Masking out the land or water
@@ -92,17 +92,21 @@ def open_and_process(data_path, k, var_name, tau_var_name, ht_var_name, height_o
         
     # Selecting lat range
     if lat_range != None:
-        if ds.lat[0] > ds.lat[-1]:
-            ds = ds.sel(lat=slice(lat_range[1],lat_range[0]))
+        if ds[lat_var_name][0] > ds[lat_var_name][-1]:
+            lat_selection = {lat_var_name:slice(lat_range[1],lat_range[0])}
+            ds = ds.sel(lat_selection)
         else:
-            ds = ds.sel(lat=slice(lat_range[0],lat_range[1]))
+            lat_selection = {lat_var_name:slice(lat_range[0],lat_range[1])}
+            ds = ds.sel(lat_selection)
 
     # Selecting Lon range
     if lon_range != None:
-        if ds.lon[0] > ds.lon[-1]:
-            ds = ds.sel(lon=slice(lon_range[1],lon_range[0]))
+        if ds[lon_var_name][0] > ds[lon_var_name][-1]:
+            lon_selection = {lon_var_name:slice(lon_range[1],lon_range[0])}
+            ds = ds.sel(lon_selection)
         else:
-            ds = ds.sel(lon=slice(lon_range[0],lon_range[1]))
+            lon_selection = {lon_var_name:slice(lon_range[0],lon_range[1])}
+            ds = ds.sel(lon_selection)
 
     # Selecting time range
     if time_range != None:
@@ -122,7 +126,7 @@ def open_and_process(data_path, k, var_name, tau_var_name, ht_var_name, height_o
     dims.remove(tau_var_name)
     dims.remove(ht_var_name)
     histograms = ds.stack(spacetime=(dims), tau_ht=(tau_var_name, ht_var_name))
-    weights = np.cos(np.deg2rad(histograms.lat.values)) # weights array to use with emd-kmeans
+    weights = np.cos(np.deg2rad(histograms[lat_var_name].values)) # weights array to use with emd-kmeans
 
     # Turning into a numpy array for clustering
     mat = histograms.values
@@ -138,29 +142,39 @@ def open_and_process(data_path, k, var_name, tau_var_name, ht_var_name, height_o
     # Safetey check that shouldnt really be necesary
     if np.min(mat < 0):
         raise Exception (f'Found negative value in ds.{var_name}, if this is a fill value for missing data, convert to nans and try again')
+    
+    # If cluster is not true, then skip clustering and just return the oopened and preprocessed data
+    if cluster == False:
+        return mat, valid_indicies, ds, histograms
 
-    # Use premade clusters to calculate cluster labels (using specified distance metric) if they have been provided
-    if type(premade_cloud_regimes) == np.ndarray:
-        cl = premade_cloud_regimes
-        k = len(premade_cloud_regimes)
-        if premade_cloud_regimes.shape != (k,len(ds[tau_var_name]) * len(ds[ht_var_name])):
-            raise Exception (f'premade_cloud_regimes is the wrong shape. premade_cloud_regimes.shape = {premade_cloud_regimes.shape}, but must be shpae {(k,len(ds.tau_var_name) * len(ds.ht_var_name))} to fit the loaded data')
-        lgr.info('Using premade cloud regimes:')
-        cluster_labels_temp = precomputed_clusters(mat, cl, wasserstein_or_euclidean)
-
-    # Otherwise preform clustering with specified distance metric
+    # If the function call sepecifies to cluster/calcuate cluster labels, then do it
     else:
-        if wasserstein_or_euclidean == "wasserstein":
-            cl, cluster_labels_temp, il, cl_list = emd_means(mat, k, tol, init, n_init, ds, tau_var_name, ht_var_name, hard_stop = 45, weights = None)
-        elif wasserstein_or_euclidean == "euclidean":
-            cl, cluster_labels_temp = euclidean_kmeans(k, init, n_init, mat, max_iter)
-        else: raise Exception ('Invalid option for wasserstein_or_euclidean. Please enter "wasserstein", "euclidean", or a numpy ndarray to use as premade cloud regimes and preform no clustering')
+        # Use premade clusters to calculate cluster labels (using specified distance metric) if they have been provided
+        if type(premade_cloud_regimes) == np.ndarray:
+            cl = premade_cloud_regimes
+            k = len(premade_cloud_regimes)
+            if premade_cloud_regimes.shape != (k,len(ds[tau_var_name]) * len(ds[ht_var_name])):
+                raise Exception (f'premade_cloud_regimes is the wrong shape. premade_cloud_regimes.shape = {premade_cloud_regimes.shape}, but must be shpae {(k,len(ds.tau_var_name) * len(ds.ht_var_name))} to fit the loaded data')
+            lgr.info('Using premade cloud regimes:')
+            cluster_labels_temp = precomputed_clusters(mat, cl, wasserstein_or_euclidean)
 
-    # Taking the flattened cluster_labels_temp array, and turning it into a datarray the shape of ds.var_name, and reinserting NaNs in place of missing data
-    cluster_labels = np.full(len(indicies), np.nan, dtype=np.int32)
-    cluster_labels[valid_indicies]=cluster_labels_temp
-    cluster_labels = xr.DataArray(data=cluster_labels, coords={"spacetime":histograms.spacetime},dims=("spacetime") )
-    cluster_labels = cluster_labels.unstack()
+        # Otherwise preform clustering with specified distance metric
+        else:
+            if wasserstein_or_euclidean == "wasserstein":
+                cl, cluster_labels_temp, il, cl_list = emd_means(mat, k, tol, init, n_init, ds, tau_var_name, ht_var_name, hard_stop = 45, weights = None)
+            elif wasserstein_or_euclidean == "euclidean":
+                cl, cluster_labels_temp = euclidean_kmeans(k, init, n_init, mat, max_iter)
+            else: raise Exception ('Invalid option for wasserstein_or_euclidean. Please enter "wasserstein", "euclidean", or a numpy ndarray to use as premade cloud regimes and preform no clustering')
+
+        # Taking the flattened cluster_labels_temp array, and turning it into a datarray the shape of ds.var_name, and reinserting NaNs in place of missing data
+        cluster_labels = np.full(len(indicies), np.nan, dtype=np.int32)
+        cluster_labels[valid_indicies]=cluster_labels_temp
+        cluster_labels = xr.DataArray(data=cluster_labels, coords={"spacetime":histograms.spacetime},dims=("spacetime") )
+        cluster_labels = cluster_labels.unstack()
+
+        return mat, cluster_labels, cluster_labels_temp, valid_indicies, ds
+
+
 
 # Plot the CR cluster centers
 def plot_hists(cluster_labels, k, ds, ht_var_name, tau_var_name, valid_indicies, mat, cluster_labels_temp, height_or_pressure):
