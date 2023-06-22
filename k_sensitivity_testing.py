@@ -8,7 +8,7 @@
 #%%
 import numpy as np
 import xarray as xr
-from Functions import emd_means, euclidean_kmeans, plot_hists_k_testing, plot_rfo, histogram_cor, spacial_cor, open_and_process
+from Functions import emd_means, euclidean_kmeans, plot_hists, plot_rfo, histogram_cor, spacial_cor, open_and_process
 import logging as lgr
 import dask
 
@@ -40,7 +40,7 @@ n_init = 1    # number of initiations of the k-means algorithm. The final result
 k_range = [3,8] # minimum and maximum values for k to test
 
 # Plot the CR centers and rfo maps? or just the correlation matricies
-plot_hists = False
+plot_cr_centers = True
 plot_rfo_graphs = False
 
 # Choose whether to use a euclidean or wasserstein distance kmeans algorithm
@@ -90,8 +90,9 @@ for k in np.arange(k_range[0], k_range[1]+1):
     histogram_cor(cl)
     spacial_cor(cluster_labels,k)
 
-    if plot_hists:
-        plot_hists_k_testing(histograms)
+    if plot_cr_centers:
+        plot_hists(cluster_labels, k, ds, ht_var_name, tau_var_name, valid_indicies, mat, cluster_labels_temp, height_or_pressure)
+
     if plot_rfo_graphs:
         plot_rfo(cluster_labels)
     
