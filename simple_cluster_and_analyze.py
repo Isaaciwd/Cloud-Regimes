@@ -20,27 +20,28 @@ lon_var_name = 'lon'
 # Does this dataset use cloud top height or cloud top pressure? enter "h" for height or "p" for pressure
 height_or_pressure = 'p'
 
+# If you wish to only fit data into a set of premade CRs, set this equal to a path to a numpy ndarray of premade cloud regimes of
+# shape=(k, n_tau_bins * n_pressure_bins). This will skip clustering and preform analysis with the premade regimes
+# If used, the below kmeans properties are ignored, and k is set to premade_cloud_regimes.shape[0]
+# Using this is different from setting init in kmeans properties to a set of CRs, as that will continue clustering using the premade 
+# cloud regimes and update them. This will not update the cloud regimes and skips clustering entirely. It will only fit the data into these CRs
+premade_cloud_regimes = '/project/amp02/idavis/isccp_clustering/modis_and_misr/modis_testing/MODIS_emd-means_n_init5_centers_1.npy'
+
 # kmeans properties
 k=6   # number of cluster to create
-tol = 30    # maximum changne in inertia values between kmeans iterations to declare convergence. should be higher if using wasserstein distance
+tol = 30    # maximum change in inertia values between kmeans iterations to declare convergence. should be higher if using wasserstein distance
 max_iter = 2   # maximum number of k-means iterations to preform for each initiation
 init='k-means++'    # initialization technique for kmeans, can be 'k-means++', 'random', or initial clusters to use of shape (k, n_tau_bins * n_pressure_bins)
 n_init = 2    # number of initiations of the k-means algorithm. The final result will be the initiation with the lowest calculated inertia
 
-# Choose whether to use a euclidean or wasserstein distance kmeans algorithm
-wasserstein_or_euclidean = "wasserstein"
-
-# Set this equal to a numpy ndarray of premade cloud regimes (shape=(k, n_tau_bins * n_pressure_bins)) to skip clustering and preform analysis with the premade regimes
-# If used, the above kmeans properties are ignored, and k is set to premade_cloud_regimes.shape[0]
-# Using this is different from setting init in kmeans properties, as that will continue clustering using the premade cloud regimes and update them. This will not update the cloud regimes
-# and skips clustering entirely. It will only fit the data into these CRs
-premade_cloud_regimes = None
+# Choose whether to use a euclidean or wasserstein distance
+wasserstein_or_euclidean = "euclidean"
 
 # Minimum and Maximum longitudes and latitudes entered as list, or None for entire range
 lat_range = [-90,90]
 lon_range = [-180,180]
 
-# Time Range min and max, or None for all time
+# Time Range min and max as list, or None for all times present in the files
 time_range = ["2003-03-01", "2004-07-01"] 
 
 # Use data only over land or over ocean

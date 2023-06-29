@@ -27,7 +27,6 @@ import dask
 dask.config.set({"array.slicing.split_large_chunks": False})
 
 # Open data, process into an (n_observation, n_dims) matrix for clustering, cluster and or create cluster labels, and return them
-# Not sure if i should move this here, not finishing for now. Still needs all the kmeans variables to be passed to work
 def open_and_process(data_path, k, tol, max_iter, init, n_init, var_name, tau_var_name, ht_var_name, lat_var_name, lon_var_name, height_or_pressure, wasserstein_or_euclidean = "euclidean", premade_cloud_regimes=None, lat_range=None, lon_range=None, time_range=None, only_ocean_or_land=False, land_frac_var_name=None, cluster=True):
     # Getting files
     files = glob.glob(data_path)
@@ -154,15 +153,15 @@ def open_and_process(data_path, k, tol, max_iter, init, n_init, var_name, tau_va
     # If the function call sepecifies to cluster/calcuate cluster labels, then do it
     else:
         # Use premade clusters to calculate cluster labels (using specified distance metric) if they have been provided
-        if type(premade_cloud_regimes) == np.ndarray:
+        if type(premade_cloud_regimes) == str:
             lgr.info(' Calculating cluster_labels for premade_cloud_regimes:')
             s = perf_counter()
-            cl = premade_cloud_regimes
-            k = len(premade_cloud_regimes)
-            if premade_cloud_regimes.shape != (k,len(ds[tau_var_name]) * len(ds[ht_var_name])):
+            cl = np.load(premade_cloud_regimes)
+            k = len(cl)
+            if cl.shape != (k,len(ds[tau_var_name]) * len(ds[ht_var_name])):
                 raise Exception (f'premade_cloud_regimes is the wrong shape. premade_cloud_regimes.shape = {premade_cloud_regimes.shape}, but must be shpae {(k,len(ds.tau_var_name) * len(ds.ht_var_name))} to fit the loaded data')
-            cluster_labels_temp = precomputed_clusters(mat, cl, wasserstein_or_euclidean)
-            lgr.info(f' {round(perf_counter()-s)} seconds to calculatecluster_labels for premade_cloud_regimes:')
+            cluster_labels_temp = precomputed_clusters(mat, cl, wasserstein_or_euclidean, ds, tau_var_name, ht_var_name)
+            lgr.info(f' {round(perf_counter()-s)} seconds to calculate cluster_labels for premade_cloud_regimes:')
             
         # Otherwise preform clustering with specified distance metric
         else:
